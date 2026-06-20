@@ -65,7 +65,7 @@ func main() {
 
 	csi.RegisterIdentityServer(srv, &driver.IdentityServer{})
 	csi.RegisterControllerServer(srv, driver.NewControllerServer(mgr, nil))
-	csi.RegisterNodeServer(srv, driver.NewNodeServer(*nodeName))
+	csi.RegisterNodeServer(srv, driver.NewNodeServer(*nodeName, *managerURL))
 
 	// Graceful shutdown on SIGINT/SIGTERM.
 	stopCh := make(chan os.Signal, 1)

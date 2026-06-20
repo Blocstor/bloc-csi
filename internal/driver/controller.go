@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
@@ -40,7 +41,7 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 		}
 	}
 
-	// Determine target nodes from topology requirements or defaults.
+	// Determine target nodes: topology hints → StorageClass parameters["nodes"] → defaults.
 	nodes := s.defaultNodes
 	if ar := req.GetAccessibilityRequirements(); ar != nil {
 		nodeSet := make(map[string]struct{})
@@ -59,6 +60,12 @@ func (s *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolu
 			for n := range nodeSet {
 				nodes = append(nodes, n)
 			}
+		}
+	}
+	// Fall back to the node list from StorageClass parameters when topology provides none.
+	if len(nodes) == 0 {
+		if p := req.GetParameters()["nodes"]; p != "" {
+			nodes = parseNodes(p)
 		}
 	}
 
@@ -109,10 +116,15 @@ func (s *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi
 		return nil, status.Errorf(codes.Internal, "publish volume: %v", err)
 	}
 
+	pubCtx := map[string]string{
+		"device": result.Device,
+	}
+	if result.NBDHost != "" {
+		pubCtx["nbd_host"] = result.NBDHost
+		pubCtx["nbd_port"] = fmt.Sprintf("%d", result.NBDPort)
+	}
 	return &csi.ControllerPublishVolumeResponse{
-		PublishContext: map[string]string{
-			"device": result.Device,
-		},
+		PublishContext: pubCtx,
 	}, nil
 }
 

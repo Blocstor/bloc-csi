@@ -9,6 +9,7 @@ RUN CGO_ENABLED=0 go build \
     -o /bloc-csi \
     ./cmd/driver
 
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.20
+RUN apk add --no-cache nbd-client e2fsprogs util-linux kmod
 COPY --from=builder /bloc-csi /bloc-csi
 ENTRYPOINT ["/bloc-csi"]

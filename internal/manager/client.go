@@ -21,8 +21,10 @@ type Volume struct {
 
 // PublishResult is returned by PublishVolume.
 type PublishResult struct {
-	Node   string `json:"node"`
-	Device string `json:"device"`
+	Node    string `json:"node"`
+	Device  string `json:"device"`
+	NBDHost string `json:"nbd_host"`
+	NBDPort int    `json:"nbd_port"`
 }
 
 // Client is an HTTP client for the bloc-manager REST API.
