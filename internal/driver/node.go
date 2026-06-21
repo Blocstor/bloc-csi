@@ -82,25 +82,45 @@ func (s *NodeServer) NodeStageVolume(_ context.Context, req *csi.NodeStageVolume
 // For NBD volumes it loads the nbd module, connects to the server, and records
 // the /dev/nbdN path in a marker file next to the staging directory.
 func (s *NodeServer) resolveDevice(volumeID string, pubCtx map[string]string, stagingPath string) (string, error) {
-	nbdHost := pubCtx["nbd_host"]
-	nbdPortStr := pubCtx["nbd_port"]
+	var nbdHost string
+	var nbdPortStr string
+	var device string
 
-	if nbdHost != "" && s.client != nil {
+	if s.client != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if res, err := s.client.PublishVolume(ctx, volumeID, s.nodeName); err == nil {
 			nbdHost = res.NBDHost
-			nbdPortStr = strconv.Itoa(res.NBDPort)
+			if res.NBDPort != 0 {
+				nbdPortStr = strconv.Itoa(res.NBDPort)
+			}
+			device = res.Device
+		} else {
+			// Fallback to static publish context if PublishVolume fails.
+			nbdHost = pubCtx["nbd_host"]
+			nbdPortStr = pubCtx["nbd_port"]
+			device = pubCtx["device"]
 		}
+	} else {
+		// Fallback to static publish context if client is nil.
+		nbdHost = pubCtx["nbd_host"]
+		nbdPortStr = pubCtx["nbd_port"]
+		device = pubCtx["device"]
 	}
 
 	if nbdHost == "" || nbdPortStr == "" {
-		// Plain block device — return as-is.
-		dev := pubCtx["device"]
-		if dev == "" {
-			return "", fmt.Errorf("device not found in publish context")
+		// Plain block device or PCIe.
+		if device == "" {
+			return "", fmt.Errorf("device path not resolved")
 		}
-		return dev, nil
+		// PCIe wait loop: wait up to 5 seconds for the block device path to appear in /dev
+		for i := 0; i < 50; i++ {
+			if _, err := os.Stat(device); err == nil {
+				return device, nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return "", fmt.Errorf("PCIe device path %q did not appear after 5 seconds", device)
 	}
 
 	markerFile := stagingPath + ".bloc-nbd-device"
